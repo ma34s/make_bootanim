@@ -1,0 +1,385 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes" ?>
+<job id="jsandvbs">
+<script language="JScript">
+<![CDATA[
+/*<this file encording is UTF-8,do not Changes this!>*/
+/*---------------------------------------------------------------------------**
+make bootanimation.zip scropt
+
+	@author	ma34s
+	@date	2012/02/16 start
+
+	@note	
+*//*-------------------------------------------------------------------------*/
+
+//=============================================================================
+//
+//	Variables
+//	
+//=============================================================================	
+//--- Dafult values
+var BIN_DIR="bin"
+var ZIP_CMD="7z.exe"
+
+var OUT_ROOT_DIR="bootanimation";
+var OUT_BASE_NAME="part";
+var ZIP_FILE_NAME="bootanimation.zip"
+var DESC_TEST="desc.txt"
+var MAX_FILES=100
+var DEF_FPS=30
+
+//--- gloval variable
+var mScriptDir;	//this script dir
+var mBinDir;	//binary dir
+var mSrcDir;
+
+//--- parameter
+var mFps;
+var mNum;
+
+//---- working object
+var objFso;
+
+//=============================================================================
+//
+//	Functions
+//	
+//=============================================================================	
+
+/*===========================================================================*/
+function init()
+/*---------------------------------------------------------------------------**
+init parameter
+
+@return         void
+@note           
+**---------------------------------------------------------------------------*/
+{/*--------------------- Start of function ---------------------*/
+	var objWshNamed, objWshUnnamed;
+
+	objFso = WScript.CreateObject("Scripting.FileSystemObject") ;
+	
+	//スクリプト名を含まないフルパスを編集する
+	mScriptDir = String(WScript.ScriptFullName).replace(WScript.ScriptName,"");
+	mBinDir=objFso.BuildPath(mScriptDir, BIN_DIR);
+
+	objWshNamed = WScript.Arguments.Named;
+	objWshUnnamed = WScript.Arguments.Unnamed;
+
+	/*ドラッグ＆ドロップ対応*/
+	if (objWshUnnamed.Count != 0)
+	{/*フォルダをD&Dすると、"\"がつかないのでここで付けておく！*/
+		mSrcDir = objWshUnnamed.Item(0) + "\\";
+	}
+	else
+	{
+		mSrcDir = mScriptDir;
+	}
+	mDstRootDir = objFso.BuildPath(mSrcDir, OUT_ROOT_DIR);
+	dbg_print("SRCDir:"+mSrcDir);
+	/*=========================================**
+		名前付き引数の取得
+	**=========================================*/
+	mNum		= GetArgInt(objWshNamed	,"num"		,MAX_FILES	);
+	mFps		= GetArgInt(objWshNamed	,"fps"		,DEF_FPS	);
+
+}/*--------------------- End of function -----------------------*/
+
+/*===========================================================================*/
+function main()
+/*---------------------------------------------------------------------------**
+main process
+
+@return         void
+@note           
+**---------------------------------------------------------------------------*/
+{/*--------------------- Start of function ---------------------*/
+	var fileCnt = 0;
+	var subCnt	= 0;
+	var dstDir="";
+	var file;
+
+	//出力フォルダ作成
+	mkdir(mDstRootDir);
+
+	objSrc = objFso.GetFolder(mSrcDir);
+	var em = new Enumerator( objSrc.Files );
+	//ファイルを指定枚数ごとにフォルダ分け
+	for( em.moveFirst(); !em.atEnd(); em.moveNext() )
+	{
+		file = em.item()
+		if( (fileCnt % mNum) == 0 )
+		{
+			dstDir = objFso.BuildPath(mDstRootDir,OUT_BASE_NAME+subCnt);
+			mkdir(dstDir);
+			subCnt++;
+			fileCnt = 0;	//reset file counter 
+		}
+		file.copy( objFso.BuildPath(dstDir, file.Name ) );
+		fileCnt++;
+		dbg_print( em.item().Name );
+	}
+
+	if( fileCnt == 1 )
+	{//最後のフォルダが1枚だけだった場合→Terminalフォルダ不要
+		subCnt--;
+	}
+	else
+	{//Terminalフォルダ作成(最後の画像で止めておくためのフォルダ/画像)
+		//最後の画像１枚だけ格納するフォルダを作成
+		dstDir = objFso.BuildPath(mDstRootDir,OUT_BASE_NAME+subCnt);
+		if(!objFso.FolderExists(dstDir) )
+		{
+			objFso.CreateFolder(dstDir);
+		}
+		file.copy( objFso.BuildPath(dstDir, file.Name ) );
+	}
+	//------------------------------------------
+	//dsec.txt 作成
+	//------------------------------------------
+	make_desc(objFso.BuildPath(mDstRootDir,DESC_TEST),file.Path,mFps,subCnt);
+	//------------------------------------------
+	//bootanimation.zip作成
+	//------------------------------------------
+	SetCurrDir(mDstRootDir);
+	make_bootanimation(subCnt)
+
+	WScript.Echo("complete!");
+	objFso = null;
+}/*--------------------- End of function -----------------------*/
+
+/*===========================================================================*/
+function make_bootanimation(subCnt)
+/*---------------------------------------------------------------------------**
+make zip(bootanimation format)
+
+@return         void
+@note           
+**---------------------------------------------------------------------------*/
+{/*--------------------- Start of function ---------------------*/
+	var subDir;
+	var zip_target="";
+	var cmd;
+	for( i=0; i<=subCnt; i++ ) //subCnt含む
+	{
+		subDir = OUT_BASE_NAME+i;
+		zip_target += subDir + " ";
+	}
+	zip_target += "desc.txt";
+	//7z.exe a -tzip -mx=0 bootanimation.zip part0 desc.txt 
+	var zip_cmd=objFso.BuildPath(mBinDir, ZIP_CMD);
+	cmd = zip_cmd+" a -tzip -mx=0 "+ZIP_FILE_NAME+" "+zip_target;
+
+	CallBat(cmd)
+	return 0;
+}/*--------------------- End of function -----------------------*/
+
+/*===========================================================================*/
+function make_desc(desc_path,img_path,fps,subCnt)
+/*---------------------------------------------------------------------------**
+make desc.txt
+
+@return         void
+@note  
+
+desc.txt 形式について
+
+header line
+part line (複数)
+
+ex) 
+	450 800 30
+	p 1 0 part0
+	p 1 0 part1
+	p 0 0 part2
+
+header line:
+	<width> <height> <fps>
+
+part line
+	p <repeatNum> <wait> <folder>
+
+	p:固定文字列'p'
+	repeatNum:　繰り返し数
+		0    = 無限ループ
+		other= ループ回数
+	wait: 再生開始待ちフレーム数
+		0    = 即時再生
+		other= 指定フレーム待ってから再生
+	folder：フォルダ名
+**---------------------------------------------------------------------------*/
+{/*--------------------- Start of function ---------------------*/
+	var objDsecTxt = objFso.CreateTextFile(desc_path, true);
+	var x,y;
+	//dsec.txt サイズ情報
+	p = GetPictureObj(img_path);	//すべて同じサイズの前提なのでどれでも良い
+	x= GetImageWidth(p);
+	y= GetImageHeight(p);
+	//setDescTxtHeader(objDsecTxt,x,y,fps)
+	objDsecTxt.WriteLine(x+" "+y+" "+fps );
+	for( i=0; i < subCnt; i++ ) //subCnt含まない！
+	{
+		repeatNum	= 1;
+		folder_name	= OUT_BASE_NAME+i;
+		//setDescTxtPart(objDsecTxt,OUT_BASE_NAME+i,1);//１回再生
+		objDsecTxt.WriteLine("p "+ repeatNum +" 0 "+folder_name );
+	}
+	//terminalフォルダ(最後は無限ループ)
+	repeatNum	= 0;
+	folder_name	= OUT_BASE_NAME+subCnt;
+	objDsecTxt.WriteLine("p "+ repeatNum +" 0 "+folder_name );
+
+	objDsecTxt.Close();
+	return 0;
+}/*--------------------- End of function -----------------------*/
+
+/*===========================================================================*/
+function GetArgString(objWshNamed , name ,def_val )
+/*---------------------------------------------------------------------------**
+
+@return         void
+@note           
+**---------------------------------------------------------------------------*/
+{/*--------------------- Start of function ---------------------*/
+	var val;
+	val	= def_val;
+	
+	if(objWshNamed.Exists(name) )
+	{
+		val = objWshNamed.Item(name);
+	    dbg_print("/" + name + " :"+ val);
+	}
+	return val;
+}/*--------------------- End of function -----------------------*/
+
+/*===========================================================================*/
+function GetArgOnOff(objWshNamed,name,def_val)
+{
+	//引数が指定されていて、"ON"/"OFF"以外の文字列が指定されていた場合がある
+	//そのため、ここで、デフォルトの文字列からデフォルト値を作成しておく
+	var def = getOnOff(def_val,0);
+	return getOnOff(GetArgString(objWshNamed,name,def_val),def);
+}/*--------------------- End of function -----------------------*/
+
+/*===========================================================================*/
+function GetArgInt(objWshNamed , name ,def_val )
+/*---------------------------------------------------------------------------**
+
+@return         void
+@note           
+**---------------------------------------------------------------------------*/
+{/*--------------------- Start of function ---------------------*/
+	var val;
+	val	= def_val;
+	
+	if(objWshNamed.Exists(name) )
+	{
+		val = objWshNamed.Item(name);
+		if(val.match(/[^0-9]+/))
+		{//数字以外の文字である場合
+			val	= def_val;
+		}
+	    dbg_print("/" + name + " :"+ val);
+	}
+	return val;
+}/*--------------------- End of function -----------------------*/
+
+/*===========================================================================*/
+function mkdir(dirBame)
+/*---------------------------------------------------------------------------**
+
+@return         void
+@note           
+**---------------------------------------------------------------------------*/
+{/*--------------------- Start of function ---------------------*/
+	dbg_print("mkdir():"+dirBame);
+
+	ret = objFso.FolderExists(dirBame);
+	if( !ret )
+    {
+		objFso.CreateFolder(dirBame);
+    }
+    return ret;
+}/*--------------------- End of function -----------------------*/
+
+
+]]>
+</script>
+
+<script language="VBScript">
+<![CDATA[
+
+' Word App Const
+Const wdSeekCurrentPageHeader=9
+Const wdAlignParagraphRight=2
+Const wdCharacter=1
+
+' Global work
+Dim WorkDir
+
+'========================================================================
+' JScriptで外部コマンドがうまく同期処理にならなかったので
+' VBSで実績のあるコードを使用する
+Function CallBat(cmd)
+	Dim objWShell
+
+	Set objWShell = CreateObject("WScript.Shell")
+
+	objWShell.CurrentDirectory = WorkDir
+'	dbg_print "現在の作業ディレクトリ= " & objWShell.CurrentDirectory
+	objWShell.Run cmd, vbNormalFocus, True
+
+	objWShell = none
+End Function
+
+'========================================================================
+' JScriptでカレントディレクトリ変更できないようなので
+' VBSで実績のあるコードを使用する
+Function SetCurrDir(dir)
+	WorkDir = dir
+End Function
+
+'------------------------------------------------------------------------------
+'GUI環境では、MsgBox連発になるのでLogファイルへ出力
+'最初はとりあえず無視で実装する
+Function dbg_print(string)
+	if UCase(Right(WScript.FullName, 11)) = "WSCRIPT.EXE" Then
+	'GUI起動の場合
+		'WScript.Echo string
+	else
+	'CUI起動の場合
+		if mDebugPrintEn=1 then
+			WScript.Echo string
+		end if
+	End If
+End Function
+
+
+Function GetPictureObj(ByVal f)
+	set GetPictureObj = LoadPicture(f)
+End Function
+
+Function GetImageWidth(p)
+	GetImageWidth = CLng(CDbl(p.Width) * 24 / 635) ' CLng の丸めの機能を利用している。
+End Function
+
+Function GetImageHeight(p)
+	GetImageHeight = CLng(CDbl(p.Height) * 24 / 635) ' CLng の丸めの機能を利用している。
+End Function
+
+]]>
+</script>
+	
+<script language="JScript">
+<![CDATA[
+/*===========================================================================**
+
+このブロックは必ず最後に置くこと
+意図通りにシンボル参照できないなど不具合の原因となる
+
+**===========================================================================*/
+init();
+main();
+]]>
+</script>
+</job>
