@@ -27,6 +27,10 @@ bootanimation.zip作成スクリプト by ma34s
 	FPS変更：DEF_FPS=XXの値を変更する
 	フォルダ内ファイル数：MAX_FILES=XXの値を変更する
 
+	表示サイズ変更：以下の値を変更
+		var WIDTH=480
+		var HEIGHT=800
+		※WIDTH=0にすると画像サイズと同じになります
 
 ○コマンドライン
 	一応コマンドラインに対応しているけど説明省略。

@@ -23,10 +23,14 @@ var ZIP_CMD="7z.exe"
 
 var OUT_ROOT_DIR="bootanimation";
 var OUT_BASE_NAME="part";
-var ZIP_FILE_NAME="bootanimation.zip"
+var ZIP_FILE_NAME="bootanimation_xxxx.zip"
 var DESC_TEST="desc.txt"
 var MAX_FILES=100
-var DEF_FPS=30
+var DEF_FPS=25
+
+//if WIDTH = 0 -> width & height set to image size
+var WIDTH=480
+var HEIGHT=800
 
 //--- gloval variable
 var mScriptDir;	//this script dir
@@ -213,8 +217,18 @@ part line
 	var x,y;
 	//dsec.txt サイズ情報
 	p = GetPictureObj(img_path);	//すべて同じサイズの前提なのでどれでも良い
-	x= GetImageWidth(p);
-	y= GetImageHeight(p);
+	
+	if(WIDTH==0)
+	{
+		x= GetImageWidth(p);
+		y= GetImageHeight(p);
+	}
+	else
+	{
+		x= WIDTH;
+		y= HEIGHT;
+		
+	}
 	//setDescTxtHeader(objDsecTxt,x,y,fps)
 	objDsecTxt.WriteLine(x+" "+y+" "+fps );
 	for( i=0; i < subCnt; i++ ) //subCnt含まない！
